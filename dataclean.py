@@ -11,6 +11,7 @@ USE_SYMBOLS = False  # if you want to remove all symbols and retain only alphabe
 SHOW_CLEAN_DATA = True  # Show training data after cleaning
 REM_STOP=True  # remove stopwords, set it True
 NEW_FIlE="./data/new_train.csv"
+BALANCED_FIlE="./data/balanced_train.csv"
 
 # #################### clean data ####################
 def cleantxt(txt):
@@ -44,13 +45,13 @@ def cleantxt(txt):
         txt = re.sub(r'([*!?\']+)', r' \1 ', txt)
     else:
         # Not Use Symbols
-        # remove special characters/symbols
+        # remove special characters/punctuations
         txt = re.sub(r"\n", " ", txt)
         txt = re.sub("[\<\[].*?[\>\]]", "", txt)
         # retain only alphabets
         txt = re.sub(r"[^a-z ]", " ", txt)  # characters not in a-z
 
-    # 3. patterns with repeating characters
+    # 3. patterns with consecutive repeating characters
     txt = re.sub(r'([a-zA-Z])\1{2,}\b', r'\1\1', txt)
     txt = re.sub(r'([a-zA-Z])\1\1{2,}\B', r'\1\1\1', txt)
     txt = re.sub(r'[ ]{2,}', ' ', txt).strip()
@@ -87,6 +88,7 @@ def do_clean():
     """
     # Load the train dataset
     df = pd.read_csv(TRAIN_FILE)
+
     # Clean the text
     print("start data cleaning...")
     tqdm.pandas(desc='pandas bar')
@@ -94,12 +96,19 @@ def do_clean():
     df['comment_text'] = df.comment_text.progress_apply(lambda x: cleantxt(x))
     # remove space and nan
     df = df.replace("", np.nan).dropna(subset=['comment_text'])
+
     # get text and target--> save
     X = df.iloc[:, 2]  # text
     y = df.iloc[:, 1]  # scores
     newdata=pd.concat([X,y],axis=1)
     # save
-    newdata.to_csv(NEW_FIlE)
+    newdata.to_csv(NEW_FIlE, index=False)
+    # data balance
+    toxic=df.loc[df['target']>0]
+    nottoxic = df.loc[df['target'] == 0]
+    subset = nottoxic.sample(n=toxic.shape[0])
+    newdata=pd.concat([toxic,subset],sort=False)
+    newdata.to_csv(BALANCED_FIlE, index=False)
     return
 
 
@@ -108,9 +117,10 @@ def get_clean_data():
     Gets data after cleaning and returns train, val, and test splits
     """
     # get newdata
-    df = pd.read_csv(NEW_FIlE)
-    X = df.iloc[:, 1]  # text
-    y = df.iloc[:, 2]  # scores
+    df = pd.read_csv(BALANCED_FIlE)
+
+    X = df['comment_text']  # text
+    y = df['target']  # scores
     # split for cross-validation (train-60%, validation 20% and test 20%)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=123)
     X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, test_size=0.5, random_state=123)
@@ -122,12 +132,12 @@ def analyze_data():
     Display Data Distribution
     """
     # get newdata
-    df = pd.read_csv(NEW_FIlE)
+    df = pd.read_csv(BALANCED_FIlE)
     print("\n")
     print("------- Display Data Distribution --------")
     # df = df.dropna(subset=['comment_text'])
-    X = df.iloc[:, 1]  # text
-    y = df.iloc[:, 2]  # scores
+    X = df['comment_text']  # text
+    y = df['target']  # scores
     length=y.shape[0]
     zero_cnt=0
     not_zero_cnt=0
@@ -149,10 +159,11 @@ def analyze_data():
 
 
 
+
 print("use symbols:", USE_SYMBOLS,"   remove stopwords:", REM_STOP, "   Show training data example:", SHOW_CLEAN_DATA,"\n")
 
 # Clean the text
-do_clean()
+# do_clean()
 
 # Data Distribution
 analyze_data()
